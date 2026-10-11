@@ -1,13 +1,9 @@
 -- FitMind SQLite Schema v1
--- 앱 초기화 시 반드시 실행: PRAGMA foreign_keys = ON;
-
--- ============================================
--- Schema Version 관리
--- ============================================
-CREATE TABLE schema_version (
-  version INTEGER NOT NULL
-);
--- 앱 최초 설치 시 1회: INSERT INTO schema_version VALUES (1);
+-- 앱 코드의 원본: lib/data/db/schema_v1.dart (두 파일은 항상 같은 내용이어야 함)
+--
+-- 연결할 때마다 반드시 실행: PRAGMA foreign_keys = ON;
+-- 스키마 버전: 별도 테이블 없이 SQLite 헤더의 PRAGMA user_version으로 관리
+--   (sqflite의 version 옵션이 관리, 마이그레이션은 lib/data/db/migrations.dart)
 
 -- ============================================
 -- User (단일 row만 존재 — 멀티유저 아님)
@@ -33,7 +29,7 @@ CREATE TABLE body_measurement (
   skeletal_muscle REAL,           -- nullable
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX idx_body_measurement_date ON body_measurement(date);
+-- date의 UNIQUE 제약이 인덱스를 자동 생성하므로 별도 인덱스 없음
 
 -- ============================================
 -- Meal (V1: 자유 텍스트 + 영양정보 수동 입력)

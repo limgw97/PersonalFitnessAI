@@ -68,14 +68,19 @@ Workout → WorkoutExercise → WorkoutSet
 
 ## 5. DB Migration
 
-- `schema_version` 테이블로 처음부터 버전 관리
-- 앱 시작 시 현재 버전 조회 → 목표 버전까지 마이그레이션 스크립트를 순차 실행(트랜잭션 단위)
-- 앱 초기화 시 `PRAGMA foreign_keys = ON;` 필수 (미설정 시 `ON DELETE CASCADE`가 조용히 동작하지 않음)
+- 스키마 버전은 별도 테이블 대신 SQLite 파일 헤더의 `PRAGMA user_version`으로 관리 (sqflite `version` 옵션)
+  - 처음엔 `schema_version` 테이블로 계획했으나, sqflite가 같은 역할을 기본 제공하므로 변경
+  - 버전이 `.db` 파일 헤더에 들어 있어 백업/복원 시 함께 이동
+- 앱 시작 시 현재 버전 → 최신 버전까지 마이그레이션을 순차 실행 (sqflite가 트랜잭션으로 감쌈, 실패 시 전체 롤백)
+- 더 새 버전 앱의 백업을 구버전 앱에서 열면 명확한 오류로 실패 (데이터 손상 방지)
+- 연결 시 `PRAGMA foreign_keys = ON;` 필수 (미설정 시 `ON DELETE CASCADE`가 조용히 동작하지 않음)
+- 기존 마이그레이션은 절대 수정하지 않고, 변경은 항상 새 버전으로 추가
 
 ```
-lib/db/migrations/
-  ├── v1_initial.sql
-  └── migration_runner.dart
+lib/data/db/
+  ├── app_database.dart   # DB 열기, FK 설정, 마이그레이션 연결
+  ├── migrations.dart     # 버전별 마이그레이션 목록 + 실행기
+  └── schema_v1.dart      # v1 CREATE 문 (docs/schema.sql과 동일)
 ```
 
 전체 스키마는 [`schema.sql`](./schema.sql) 참고.
