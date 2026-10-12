@@ -169,23 +169,61 @@ void main() {
       expect(credentials.email, 'me@example.com');
     });
 
-    test('state가 다르면 토큰을 교환하지 않고 실패한다', () async {
-      var tokenRequested = false;
+    test('state가 다른 콜백은 거절하고 진짜 콜백을 계속 기다린다', () async {
+      final exchangedCodes = <String>[];
+      late Uri authorizeUrl;
+      int? forgedStatus;
+
+      Future<int> hitCallback(Map<String, String> params) async {
+        final client = HttpClient();
+        final request = await client.getUrl(
+            Uri.parse('http://127.0.0.1:$port/auth/callback')
+                .replace(queryParameters: params));
+        final response = await request.close();
+        await response.drain<void>();
+        client.close();
+        return response.statusCode;
+      }
+
       final signIn = ChatGptSignIn(
         hostId: 'urn:uuid:host',
         port: port,
-        httpClient: MockClient((_) async {
-          tokenRequested = true;
-          return http.Response('{}', 200);
+        httpClient: MockClient((request) async {
+          exchangedCodes.add(Uri.splitQueryString(request.body)['code']!);
+          return http.Response(
+            jsonEncode({
+              'access_token': 'access-1',
+              'refresh_token': 'refresh-1',
+              'scope': ChatGptSignIn.scopes,
+              'id_token': fakeJwt({
+                'iss': ChatGptSignIn.issuer,
+                'aud': 'issued-client',
+                'exp': inOneHour(),
+                'nonce': authorizeUrl.queryParameters['nonce'],
+              }),
+            }),
+            200,
+          );
         }),
-        openBrowser: fakeBrowser(
-          onOpen: (_) {},
-          callbackParams: (_) => {'code': 'c', 'state': 'forged'},
-        ),
+        openBrowser: (url) async {
+          authorizeUrl = url;
+          unawaited(Future<void>.delayed(const Duration(milliseconds: 50), () async {
+            // 다른 앱이 먼저 끼어든 상황
+            forgedStatus = await hitCallback({'code': 'forged-code', 'state': 'forged'});
+            await hitCallback({
+              'code': 'real-code',
+              'state': url.queryParameters['state']!,
+              'client_id': 'issued-client',
+            });
+          }));
+          return true;
+        },
       );
 
-      await expectLater(signIn.signIn(), throwsA(isA<ChatGptAuthException>()));
-      expect(tokenRequested, isFalse);
+      final credentials = await signIn.signIn();
+      expect(forgedStatus, HttpStatus.badRequest);
+      expect(exchangedCodes, ['real-code']);
+      expect(credentials.accessToken, 'access-1');
     });
 
     test('앱이 앞으로 올 때까지 토큰 교환을 미룬다', () async {
@@ -256,6 +294,50 @@ void main() {
         signIn.signIn(),
         throwsA(isA<ChatGptAuthException>()
             .having((e) => e.message, 'message', contains('취소'))),
+      );
+    });
+  });
+
+  group('ChatGptSignIn.refresh', () {
+    final current = ChatGptCredentials(
+      clientId: 'client-1',
+      hostId: 'urn:uuid:host',
+      accessToken: 'old-access',
+      refreshToken: 'old-refresh',
+      idToken: '',
+      expiresAt: DateTime.now(),
+      scopes: ChatGptSignIn.scopes.split(' ').toSet(),
+    );
+
+    ChatGptSignIn signInWith(Map<String, Object?> tokenResponse) => ChatGptSignIn(
+          hostId: 'urn:uuid:host',
+          clientId: 'client-1',
+          openBrowser: (_) async => true,
+          httpClient: MockClient(
+              (_) async => http.Response(jsonEncode(tokenResponse), 200)),
+        );
+
+    test('새 토큰으로 교체하고, scope가 없으면 기존 권한을 유지한다', () async {
+      final refreshed = await signInWith({
+        'access_token': 'new-access',
+        'refresh_token': 'new-refresh',
+        'expires_in': 3600,
+      }).refresh(current);
+
+      expect(refreshed.accessToken, 'new-access');
+      expect(refreshed.refreshToken, 'new-refresh');
+      expect(refreshed.scopes, contains(ChatGptSignIn.planUsageScope));
+    });
+
+    test('구독 사용량 권한이 빠지면 실패한다', () async {
+      await expectLater(
+        signInWith({
+          'access_token': 'new-access',
+          'refresh_token': 'new-refresh',
+          'scope': 'openid profile email offline_access',
+        }).refresh(current),
+        throwsA(isA<ChatGptAuthException>().having(
+            (e) => e.code, 'code', ChatGptSignIn.planUsageRevokedCode)),
       );
     });
   });

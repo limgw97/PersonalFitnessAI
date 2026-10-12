@@ -100,16 +100,12 @@ class ChatGptSignIn {
         throw const ChatGptAuthException('브라우저를 열 수 없습니다.');
       }
 
-      final callback = await _waitForCallback(server).timeout(
+      final callback = await _waitForCallback(server, state).timeout(
         timeout,
         onTimeout: () =>
             throw const ChatGptAuthException('로그인 시간이 초과되었습니다.'),
       );
 
-      // 다른 요청이 끼어들지 않았는지 확인 (CSRF 방지)
-      if (callback['state'] != state) {
-        throw const ChatGptAuthException('로그인 응답이 올바르지 않습니다 (state 불일치).');
-      }
       final error = callback['error'];
       if (error != null) {
         throw ChatGptAuthException(
@@ -174,16 +170,36 @@ class ChatGptSignIn {
       'refresh_token': current.refreshToken,
       'resource': resource,
     });
-    return ChatGptCredentials.fromTokenResponse(
+    final refreshed = ChatGptCredentials.fromTokenResponse(
       tokens,
       clientId: current.clientId,
       hostId: current.hostId,
       // 갱신 응답에 없는 값은 기존 값 유지
       previous: current,
     );
+    // 구독이 끝나는 등으로 권한이 빠졌으면 갱신이 성공해도 AI 호출은 403이 됨
+    // → 여기서 바로 알려 재로그인/플랜 확인으로 안내
+    if (!refreshed.scopes.contains(planUsageScope)) {
+      throw const ChatGptAuthException(
+        '구독 사용량 권한이 없어졌습니다. ChatGPT 플랜을 확인한 뒤 다시 로그인하세요.',
+        code: planUsageRevokedCode,
+      );
+    }
+    return refreshed;
   }
 
-  Future<Map<String, String>> _waitForCallback(HttpServer server) async {
+  /// 갱신 시 구독 사용량 권한이 빠진 경우의 오류 코드
+  static const planUsageRevokedCode = 'plan_usage_revoked';
+
+  /// 이번 로그인의 state가 담긴 콜백만 받습니다.
+  ///
+  /// 루프백 포트는 기기의 다른 앱도 접근할 수 있으므로, state가 다른 요청에
+  /// 실패로 끝내면 아무 앱이나 로그인을 방해할 수 있습니다. 그런 요청은
+  /// 거절만 하고 진짜 콜백을 계속 기다립니다 (CSRF 방지는 그대로 유지).
+  Future<Map<String, String>> _waitForCallback(
+    HttpServer server,
+    String expectedState,
+  ) async {
     await for (final request in server) {
       if (request.uri.path != callbackPath) {
         request.response.statusCode = HttpStatus.notFound;
@@ -191,6 +207,11 @@ class ChatGptSignIn {
         continue;
       }
       final params = request.uri.queryParameters;
+      if (params['state'] != expectedState) {
+        request.response.statusCode = HttpStatus.badRequest;
+        await request.response.close();
+        continue;
+      }
       request.response
         ..statusCode = HttpStatus.ok
         ..headers.contentType = ContentType.html
