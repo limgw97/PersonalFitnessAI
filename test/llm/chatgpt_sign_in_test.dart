@@ -188,6 +188,56 @@ void main() {
       expect(tokenRequested, isFalse);
     });
 
+    test('앱이 앞으로 올 때까지 토큰 교환을 미룬다', () async {
+      final foreground = Completer<void>();
+      final callbackReceived = Completer<void>();
+      var tokenRequested = false;
+      late Uri authorizeUrl;
+
+      final signIn = ChatGptSignIn(
+        hostId: 'urn:uuid:host',
+        port: port,
+        waitForForeground: () {
+          callbackReceived.complete();
+          return foreground.future;
+        },
+        httpClient: MockClient((_) async {
+          tokenRequested = true;
+          return http.Response(
+            jsonEncode({
+              'access_token': 'access-1',
+              'refresh_token': 'refresh-1',
+              'scope': ChatGptSignIn.scopes,
+              'id_token': fakeJwt({
+                'iss': ChatGptSignIn.issuer,
+                'aud': 'issued-client',
+                'exp': inOneHour(),
+                'nonce': authorizeUrl.queryParameters['nonce'],
+              }),
+            }),
+            200,
+          );
+        }),
+        openBrowser: fakeBrowser(
+          onOpen: (url) => authorizeUrl = url,
+          callbackParams: (url) => {
+            'code': 'auth-code',
+            'state': url.queryParameters['state']!,
+            'client_id': 'issued-client',
+          },
+        ),
+      );
+
+      final result = signIn.signIn();
+      await callbackReceived.future;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(tokenRequested, isFalse);
+
+      foreground.complete();
+      expect((await result).accessToken, 'access-1');
+      expect(tokenRequested, isTrue);
+    });
+
     test('사용자가 동의를 취소하면 실패한다', () async {
       final signIn = ChatGptSignIn(
         hostId: 'urn:uuid:host',

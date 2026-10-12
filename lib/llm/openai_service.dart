@@ -40,7 +40,17 @@ class OpenAIService implements LLMService {
       ..body = jsonEncode({
         'model': model,
         'instructions': instructions,
-        'input': input,
+        // ChatGPT 로그인 방식은 문자열 input을 거부함 ("Input must be a list", 실기기 확인)
+        // → 메시지 목록 형식 사용 (API Key 방식에서도 표준 형식)
+        'input': [
+          {
+            'type': 'message',
+            'role': 'user',
+            'content': [
+              {'type': 'input_text', 'text': input},
+            ],
+          },
+        ],
         // ChatGPT 로그인 방식은 둘 다 필수. API Key 방식에서도 문제없음.
         // store: false → OpenAI 쪽에 응답을 저장하지 않음 (결과는 앱 DB에만 저장)
         'store': false,
@@ -68,16 +78,24 @@ class OpenAIService implements LLMService {
     try {
       final json = jsonDecode(body) as Map<String, Object?>;
       final error = json['error'] as Map<String, Object?>?;
+      final detail = json['detail'];
       return LLMException(
-        (error?['message'] as String?) ?? 'AI 요청이 실패했습니다.',
+        (error?['message'] as String?) ??
+            (detail is String ? detail : null) ??
+            // 형식을 모르는 오류는 원인 파악을 위해 본문을 남김
+            'AI 요청이 실패했습니다: ${_truncate(body)}',
         code: error?['code'] as String?,
         statusCode: statusCode,
       );
     } catch (_) {
-      return LLMException('AI 요청이 실패했습니다 (HTTP $statusCode).',
+      return LLMException(
+          'AI 요청이 실패했습니다 (HTTP $statusCode): ${_truncate(body)}',
           statusCode: statusCode);
     }
   }
+
+  static String _truncate(String s) =>
+      s.length > 500 ? '${s.substring(0, 500)}…' : s;
 }
 
 /// Responses API 스트림(SSE)을 읽어 최종 텍스트를 만듭니다.

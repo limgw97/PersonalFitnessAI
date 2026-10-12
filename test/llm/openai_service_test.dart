@@ -94,6 +94,16 @@ void main() {
       expect(body['model'], 'test-model');
       expect(body['store'], false);
       expect(body['stream'], true);
+      // ChatGPT 로그인 방식은 문자열 input을 거부하므로 메시지 목록이어야 함
+      expect(body['input'], [
+        {
+          'type': 'message',
+          'role': 'user',
+          'content': [
+            {'type': 'input_text', 'text': '입력'},
+          ],
+        },
+      ]);
     });
 
     test('401은 isAuthError로 구분된다', () async {
@@ -114,6 +124,28 @@ void main() {
         service.complete(instructions: '', input: ''),
         throwsA(isA<LLMException>().having((e) => e.isAuthError, 'isAuthError', isTrue)),
       );
+    });
+
+    test('error.message가 없는 오류는 detail이나 본문을 메시지에 남긴다', () async {
+      Future<LLMException> failWith(String body) async {
+        final service = OpenAIService(
+          token: () async => 't',
+          model: 'test-model',
+          client: MockClient.streaming((request, bodyStream) async =>
+              http.StreamedResponse(Stream.value(utf8.encode(body)), 400)),
+        );
+        try {
+          await service.complete(instructions: 'i', input: 'x');
+        } on LLMException catch (e) {
+          return e;
+        }
+        fail('LLMException이 발생해야 합니다');
+      }
+
+      expect((await failWith('{"detail":"Unsupported model"}')).message,
+          'Unsupported model');
+      expect((await failWith('{"foo":1}')).message, contains('{"foo":1}'));
+      expect((await failWith('not json')).message, contains('not json'));
     });
   });
 }

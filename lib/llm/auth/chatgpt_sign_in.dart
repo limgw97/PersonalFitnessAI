@@ -25,6 +25,7 @@ class ChatGptSignIn {
     this.clientId,
     this.appName = 'FitMind',
     this.port = 1455,
+    this.waitForForeground,
     http.Client? httpClient,
   }) : _http = httpClient ?? http.Client();
 
@@ -57,6 +58,13 @@ class ChatGptSignIn {
 
   /// 시스템 브라우저로 URL을 여는 함수 (url_launcher를 주입)
   final Future<bool> Function(Uri url) openBrowser;
+
+  /// 콜백을 받은 뒤 토큰 교환 직전에 기다릴 작업.
+  ///
+  /// Android 15+는 백그라운드 앱의 외부 네트워크를 막습니다. 콜백(127.0.0.1)은
+  /// 기기 내부라 받아지지만, 브라우저가 앞에 있는 동안 토큰 요청은 DNS 단계에서
+  /// 실패합니다 (실기기에서 확인). 그래서 앱이 다시 앞으로 올 때까지 기다립니다.
+  final Future<void> Function()? waitForForeground;
 
   final http.Client _http;
 
@@ -124,6 +132,8 @@ class ChatGptSignIn {
           returnedClientId != clientId) {
         throw const ChatGptAuthException('client_id가 일치하지 않습니다.');
       }
+
+      await waitForForeground?.call();
 
       final tokens = await _postToken({
         'grant_type': 'authorization_code',

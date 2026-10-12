@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -62,7 +63,25 @@ class _SiwcSpikePageState extends State<SiwcSpikePage> {
         clientId: await _store.clientId(),
         openBrowser: (url) =>
             launchUrl(url, mode: LaunchMode.externalApplication),
+        waitForForeground: _waitForForeground,
       );
+
+  /// 앱이 화면 앞에 올 때까지 대기 (백그라운드에서는 외부 네트워크가 막힘)
+  Future<void> _waitForForeground() async {
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      return;
+    }
+    _log('콜백 수신. 앱으로 돌아오면 토큰을 교환합니다.');
+    final resumed = Completer<void>();
+    final listener = AppLifecycleListener(onResume: () {
+      if (!resumed.isCompleted) resumed.complete();
+    });
+    try {
+      await resumed.future;
+    } finally {
+      listener.dispose();
+    }
+  }
 
   /// 단계 실행 공통 처리: 중복 실행 방지 + 오류를 로그로
   Future<void> _run(String step, Future<void> Function() action) async {
@@ -100,8 +119,16 @@ class _SiwcSpikePageState extends State<SiwcSpikePage> {
         if (response.statusCode != 200) {
           throw LLMException(response.body, statusCode: response.statusCode);
         }
-        final data = (jsonDecode(response.body) as Map<String, Object?>)['data']
-            as List<Object?>;
+        final json = jsonDecode(response.body) as Map<String, Object?>;
+        // 응답 형식이 문서화되어 있지 않아 두 가지 모두 허용
+        final data = json['data'] ?? json['models'];
+        if (data is! List) {
+          final body = response.body;
+          throw StateError('모델 목록 형식을 알 수 없습니다. keys=${json.keys.toList()}\n'
+              '${body.length > 800 ? '${body.substring(0, 800)}…' : body}');
+        }
+        _log('응답 키: ${json.keys.toList()}, 첫 항목: '
+            '${data.isEmpty ? '-' : jsonEncode(data.first)}');
         final models = data
             .whereType<Map<String, Object?>>()
             .where((m) => m['visibility'] == null || m['visibility'] == 'list')
