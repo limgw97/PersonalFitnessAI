@@ -23,7 +23,7 @@ Persistent User Data → Structured Data Processing → LLM Analysis → Actiona
 | 항목 | V1 |
 |---|---|
 | Flutter + SQLite | ✅ |
-| LLM 인증 ① ChatGPT 계정 로그인 (구독 사용량) | ✅ 1순위 (Android 동작 검증 후 확정) |
+| LLM 인증 ① ChatGPT 계정 로그인 (구독 사용량) | ✅ 1순위 (2026-10-12 Android 실기기 검증 완료) |
 | LLM 인증 ② 사용자 API Key (BYOK) | ✅ 2순위 |
 | 수동 복사/붙여넣기 모드 | ❌ |
 | 토큰/API Key는 Secure Storage 저장 (SQLite 평문 저장 금지) | ✅ |
@@ -49,8 +49,24 @@ Flutter → SQLite → Statistics → LLMService → OpenAIService → OpenAI Re
 - **인증: ChatGPT 로그인 1순위, API Key 2순위** (2026-10 결정)
   - API는 사용량만큼 별도 과금 → 사용자가 이미 내는 ChatGPT 구독을 쓰는 쪽을 우선
   - OpenAI "Sign in with ChatGPT"(Preview): 오픈소스·로컬 앱은 별도 승인 없이 구독(Go/Plus/Pro) 사용량 연동 가능. 루프백(`127.0.0.1`) 콜백 + PKCE 방식
-  - 공식 예시는 데스크톱(Electron)뿐이고 Android 지원은 명시되어 있지 않음 → Android 실행 환경이 갖춰지는 즉시 "폰 브라우저 로그인 → 앱 콜백 수신 → 토큰 발급 → AI 호출"을 실기기로 검증 (`lib/dev/` 검증 화면)
+  - 공식 예시는 데스크톱(Electron)뿐이고 Android 지원은 명시되어 있지 않음 → 실기기로 검증 (`lib/dev/siwc_spike_page.dart`)
   - 로그인 토큰과 API Key는 같은 `/v1/responses`에 Bearer로 들어가므로 `OpenAIService`는 하나, 인증만 교체
+
+### Android 실기기 검증 결과 (2026-10-12)
+
+Galaxy S25 (Android 16), ChatGPT Plus 계정. 로그인 → 모델 목록 → AI 호출 → 토큰 갱신 모두 성공.
+아래는 공식 문서에 없어 **실측으로 확인한 동작**이며, Preview 기능이라 예고 없이 바뀔 수 있음.
+
+| 항목 | 확인된 동작 | 코드 반영 |
+|---|---|---|
+| 루프백 콜백 | Android에서도 브라우저 → `127.0.0.1:1455` 콜백 수신됨 | - |
+| 백그라운드 네트워크 | Android 15+는 백그라운드 앱의 외부 네트워크를 차단. 콜백 직후(브라우저가 앞) 토큰 요청은 DNS 실패 | 앱이 포그라운드로 돌아온 뒤 토큰 교환 (`ChatGptSignIn.waitForForeground`) |
+| 권한(scope) | 요청한 6개 모두 부여 (`chatgpt.tokens.use.direct` 포함) | - |
+| 모델 목록 `GET /v1/models` | `{"models": [...]}` 형식, 항목은 `slug`/`display_name`. Plus 계정 기준 7개 | 계정별 목록에서 모델 선택 |
+| `POST /v1/responses` | `input`이 문자열이면 400 `Input must be a list` | 메시지 목록 형식으로 전송 |
+| 토큰 | access token 수명 1시간. `grant_type=refresh_token` 갱신 성공 | 만료 1분 전 자동 갱신 |
+
+UX 영향: 사용자가 브라우저에서 **앱으로 직접 돌아와야** 로그인이 완료됨 → 로그인 화면에 안내 필요. 딥링크 자동 복귀는 `MainActivity`의 `taskAffinity=""` 때문에 새 Activity가 떠 로그인 상태를 잃을 수 있어 보류.
 - **제외한 대안**
   - 수동 복사/붙여넣기: LLM을 앱에 통합한다는 프로젝트 목표 자체가 사라짐
   - Claude 구독 로그인: Anthropic이 2026년 초부터 제3자 앱에서의 구독 OAuth 사용을 약관 위반으로 명시
@@ -159,8 +175,8 @@ LLM에 실제로 전달한 구조화 데이터를 `input_summary`(JSON)로 함�
 
 ## 9. 미확정 사항
 
-- [ ] SQLite 라이브러리 (sqflite 등)
-- [ ] OpenAI 모델 선택 및 Prompt 구조
+- [x] SQLite 라이브러리 → `sqflite` (테스트는 `sqflite_common_ffi`)
+- [ ] OpenAI 모델 선택 및 Prompt 구조 (모델은 계정별 `/v1/models` 목록에서 선택하는 것으로 확인, 기본값 미정)
 - [ ] AI에게 전달할 데이터 범위
 - [ ] 체중/체지방/골격근 그래프 UI
 - [ ] 안전한 `.db` 백업 방식 (SQLite Backup API 등)
