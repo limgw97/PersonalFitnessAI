@@ -15,12 +15,11 @@ typedef BearerTokenProvider = Future<String> Function();
 /// OpenAI Responses API(`POST /v1/responses`) 구현체.
 class OpenAIService implements LLMService {
   OpenAIService({
-    required BearerTokenProvider token,
+    required this._token,
     required this.model,
     http.Client? client,
     Uri? endpoint,
-  })  : _token = token,
-        _client = client ?? http.Client(),
+  })  : _client = client ?? http.Client(),
         _endpoint = endpoint ?? Uri.parse('https://api.openai.com/v1/responses');
 
   final BearerTokenProvider _token;
