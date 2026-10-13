@@ -53,13 +53,15 @@ Flutter App
  ├── Statistics / Data Processing (기간별 통계 계산은 앱에서 선처리)
  │
  └── LLMService
-      └── OpenAIService (V1 실구현)
-           ↑
-     사용자가 직접 API Key 등록 (BYOK)
-     Key는 Secure Storage에 저장, SQLite에는 저장하지 않음
+      └── OpenAIService (V1 실구현, Responses API)
+           ↑ 인증 (둘 중 하나)
+           ├─ ① ChatGPT 계정 로그인: 본인 Plus/Pro 구독 사용량으로 호출
+           └─ ② 사용자 본인 API Key (BYOK)
+     토큰/Key는 Secure Storage에 저장, SQLite에는 저장하지 않음
 ```
 
-- **서버 없음.** 사용자가 자신의 LLM API Key를 직접 등록해서 사용하는 BYOK(Bring Your Own Key) 구조로, 개발자가 API 비용이나 서버를 운영할 필요가 없습니다.
+- **서버 없음.** 사용자가 자신의 ChatGPT 계정으로 로그인하거나(구독 사용량 사용) 자신의 API Key를 등록(BYOK)해서 사용하므로, 개발자가 API 비용이나 서버를 운영할 필요가 없습니다.
+- ChatGPT 로그인은 OpenAI의 "Sign in with ChatGPT"(Preview)를 사용합니다. Android 지원이 공식 문서로 확인되지 않아 개발 초기에 직접 검증하며, 안 될 경우 API Key 방식을 사용합니다.
 - `LLMService` 인터페이스로 Provider를 추상화해두되, V1에서 실제로 구현하는 Provider는 **OpenAI 하나**로 제한합니다. 구조적 확장성은 확보하되 구현 범위는 통제하는 방향입니다.
 
 #### 향후 확장 방향
@@ -139,8 +141,8 @@ AIAnalysis (input_summary 포함 — 재현/디버깅/비교 목적)
 |---|---|
 | App | Flutter |
 | Local DB | SQLite |
-| LLM (V1) | OpenAI API (BYOK) |
-| API Key 저장 | Secure Storage (Android/iOS) |
+| LLM (V1) | OpenAI Responses API (ChatGPT 로그인 우선, API Key 대안) |
+| 토큰 / API Key 저장 | Secure Storage (Android/iOS) |
 | Server | 없음 (V1) |
 
 ### 개발 로드맵
@@ -206,13 +208,15 @@ Flutter App
  ├── Statistics / Data Processing（期間ごとの統計計算はアプリ側で事前処理）
  │
  └── LLMService
-      └── OpenAIService（V1で実装）
-           ↑
-     ユーザーが自分のAPI Keyを登録（BYOK）
-     KeyはSecure Storageに保存、SQLiteには保存しない
+      └── OpenAIService（V1で実装、Responses API）
+           ↑ 認証（いずれか）
+           ├─ ① ChatGPTアカウントでログイン：本人のPlus/Proサブスク利用枠で呼び出し
+           └─ ② ユーザー本人のAPI Key（BYOK）
+     トークン/KeyはSecure Storageに保存、SQLiteには保存しない
 ```
 
-- **サーバーなし。** ユーザーが自身のLLM API Keyを登録して使うBYOK（Bring Your Own Key）構造のため、開発者がAPI費用やサーバー運用を負担する必要がありません。
+- **サーバーなし。** ユーザーが自身のChatGPTアカウントでログインする（サブスク利用枠を使用）か、自身のAPI Keyを登録（BYOK）して使うため、開発者がAPI費用やサーバー運用を負担する必要がありません。
+- ChatGPTログインにはOpenAIの「Sign in with ChatGPT」（Preview）を使用します。Android対応が公式ドキュメントで確認できないため開発初期に実機で検証し、不可の場合はAPI Key方式を使用します。
 - `LLMService`インターフェースでProviderを抽象化しつつ、V1で実際に実装するProviderは**OpenAIのみ**に限定します。構造上の拡張性は確保しつつ、実装範囲はコントロールする方針です。
 
 #### 今後の拡張方向
@@ -292,8 +296,8 @@ AIAnalysis (input_summaryを含む — 再現/デバッグ/比較用)
 |---|---|
 | App | Flutter |
 | Local DB | SQLite |
-| LLM (V1) | OpenAI API (BYOK) |
-| API Key 保存 | Secure Storage (Android/iOS) |
+| LLM (V1) | OpenAI Responses API（ChatGPTログイン優先、API Keyは代替） |
+| トークン / API Key 保存 | Secure Storage (Android/iOS) |
 | Server | なし (V1) |
 
 ### 開発ロードマップ
@@ -359,13 +363,15 @@ Flutter App
  ├── Statistics / Data Processing (period-based stats pre-computed in-app)
  │
  └── LLMService
-      └── OpenAIService (implemented in V1)
-           ↑
-     User registers their own API Key (BYOK)
-     Key stored in Secure Storage, never in SQLite
+      └── OpenAIService (implemented in V1, Responses API)
+           ↑ Authentication (either)
+           ├─ ① Sign in with ChatGPT: uses the user's own Plus/Pro plan allowance
+           └─ ② User's own API key (BYOK)
+     Tokens/keys stored in Secure Storage, never in SQLite
 ```
 
-- **No server.** Uses a BYOK (Bring Your Own Key) structure where the user registers their own LLM API key, so the developer doesn't need to cover API costs or run a server.
+- **No server.** Users either sign in with their own ChatGPT account (using their plan allowance) or register their own API key (BYOK), so the developer doesn't need to cover API costs or run a server.
+- ChatGPT sign-in uses OpenAI's "Sign in with ChatGPT" (preview). Android support isn't confirmed in the official docs, so it is verified on a real device early in development; if it doesn't work, the API key path is used.
 - The `LLMService` interface abstracts the provider, but V1 implements **only OpenAI**. This keeps the architecture extensible while keeping the implementation scope controlled.
 
 #### Future Expansion
@@ -445,8 +451,8 @@ Full schema definition: see `/docs/schema.sql`. *(to be added)*
 |---|---|
 | App | Flutter |
 | Local DB | SQLite |
-| LLM (V1) | OpenAI API (BYOK) |
-| API Key storage | Secure Storage (Android/iOS) |
+| LLM (V1) | OpenAI Responses API (Sign in with ChatGPT first, API key fallback) |
+| Token / API key storage | Secure Storage (Android/iOS) |
 | Server | None (V1) |
 
 ### Roadmap
