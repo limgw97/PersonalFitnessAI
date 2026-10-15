@@ -85,6 +85,23 @@ lib/data/db/
 
 전체 스키마는 [`schema.sql`](./schema.sql) 참고.
 
+### 데이터 계층 구조
+
+```
+lib/
+├── core/db_date.dart          # 'YYYY-MM-DD' ↔ DateTime
+├── data/
+│   ├── db/                    # DB 열기, 마이그레이션, 스키마
+│   ├── models/                # UserProfile, BodyMeasurement, Meal, Workout(+Exercise, Set)
+│   └── repositories/          # 테이블별 저장/조회 (화면은 Repository만 사용)
+└── domain/period_summary.dart # 기간 통계 → LLM input_summary
+```
+
+- 입력값 검증(strength/cardio 규칙 포함)은 모델의 `validate()`에서, 저장 직전 Repository가 호출
+- upsert는 `INSERT ... ON CONFLICT`(SQLite 3.24+) 대신 UPDATE → INSERT 순서 (구형 Android 기기 호환)
+- 운동 세션 수정 시 종목/세트는 전부 지우고 다시 저장 (V1 단순화)
+- 식단 평균은 "기록한 날" 기준, 탄수화물/지방은 기간 내 모든 식사에 값이 있을 때만 평균
+
 ---
 
 ## 6. AIAnalysis / input_summary
