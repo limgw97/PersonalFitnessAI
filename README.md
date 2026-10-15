@@ -468,5 +468,3 @@ Full schema definition: see `/docs/schema.sql`. *(to be added)*
 ---
 
 *This document summarizes the project's initial design discussion and will be updated as development progresses. / 本ドキュメントはプロジェクト初期設計の議論をまとめたものであり、開発の進行に伴い更新されます. / 이 문서는 프로젝트 초기 설계 논의를 정리한 초안이며 개발 진행에 따라 갱신됩니다.*
-# PersonalFitnessAI
-LLM 기반 맞춤형 운동·식단 관리 앱, LLMを活用したパーソナライズドな運動・食事管理アプリ, LLM-powered personalized fitness &amp; nutrition tracker
